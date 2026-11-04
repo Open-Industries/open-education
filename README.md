@@ -1,52 +1,94 @@
-# Open Education
+# Open Education — Reference Learning Core Platform
 
-Reference implementation scaffold for **portable learning records and education services**, derived from the doctoral framework *Adaptive AI-Assisted Orchestration and Semantic Interoperability for Serverless Microservices in Hybrid Open Industry Ecosystems*.
+A **standard, generic education core platform** that any organization in this vertical
+can deploy and adapt: built as **microservices and serverless functions** on
+**Java 21 + Quarkus**, aligned with **The Twelve-Factor App**, documented under the ISO
+architecture and quality standards, and aligned with the domain standards of the
+vertical (see the traceability matrix). Everything is *aligned to* the cited standards —
+**no certification, conformance or regulatory-compliance claim is made**. All data is
+**synthetic**.
 
-> Status: research scaffold. It uses synthetic examples and is not a production certification or regulatory-compliance claim.
+> Reference implementation: small, complete and runnable. The rules that matter in this
+> domain are enforced in code and covered by tests — start with the invariant:
+> credits awarded to a learner never exceed the program's required total — an award that would overrun it is rejected (422) and records nothing; the remaining-credits balance never goes negative.
 
-## Architecture
+## Standards alignment
 
-The repository applies a provider-neutral, event-aware architecture with:
+| Standard / framework | What it governs here | Where |
+|---|---|---|
+| ISO/IEC/IEEE **42010** | Architecture description | `docs/architecture/architecture-description.md` |
+| ISO/IEC **25010** (SQuaRE) | Product quality model and scenarios | `docs/architecture/quality-attributes.md` |
+| ISO/IEC/IEEE **15288 & 12207** | Life-cycle processes | `docs/lifecycle/software-lifecycle.md` |
+| ISO/IEC **27001 & 27002** | Information security | `docs/security/` |
+| **The Twelve-Factor App** | Cloud-native methodology | `docs/architecture/twelve-factor.md` |
+| IEEE 9274.1.1 (xAPI) | Learning experience records | Statement-shaped events in `contracts/asyncapi.yaml` |
+| IMS LTI 1.3 | Tool interoperability / launch | Boundary: launches integrate at the gateway with the LMS |
+| IMS OneRoster | Rosters and enrolments | Learner/enrolment data posture |
+| Open Badges 3.0 / W3C VC | Verifiable credentials | Boundary: issuance consumes this core's completion verdicts |
+| WCAG 2.2 | Accessibility | Accessible API error and content contracts |
+| ISO/IEC 40180 | Quality for learning, education and training | Quality model mapping in `docs/architecture/quality-attributes.md` |
 
-- governed API entry and explicit OpenAPI contracts;
-- CloudEvents and AsyncAPI for asynchronous interoperability;
-- identity, consent, audit, catalog, policy and observability services;
-- Saga, CQRS, Outbox/Inbox, idempotency, Circuit Breaker and DLQ where justified;
-- OpenTelemetry instrumentation and policy-as-code controls;
-- Kubernetes/OpenShift deployment assets without hard-coding one cloud provider.
+Full traceability: `docs/compliance/standards-traceability.md`.
 
-## Repository layout
+## The platform at a glance
 
-| Path | Purpose |
-|---|---|
-| `contracts/` | OpenAPI, AsyncAPI and CloudEvents schemas |
-| `docs/` | Architecture, domain model and ADRs |
-| `examples/` | Synthetic requests and events |
-| `infrastructure/` | Kubernetes/OpenShift and Helm assets |
-| `observability/` | OpenTelemetry configuration |
-| `policies/` | Rego policies for baseline governance |
-| `services/` | Domain and transversal microservices |
-| `tests/` | Contract, integration, resilience and performance tests |
+### Microservices (Quarkus, `services/`)
+
+| Service | Port | Alignment | Responsibility |
+|---|---|---|---|
+| `learner-service` | 8081 | IMS OneRoster learner posture; privacy by design | Learner registry; the institutional identifier is masked at enrolment. |
+| `progress-service` | 8082 | Program completion accounting | Remaining-credits accounts per learner and the credit awards against them. |
+| `assessment-rules-service` | 8083 | Assessment governance as auditable rules | Decision rules binding study levels to attempt limits and integrity envelopes. |
+| `course-catalog-service` | 8084 | Curriculum data; OneRoster course posture | Course catalogue with credit values and modalities. |
+| `notification-service` | 8085 | Platform support (shared pattern) | Channel-agnostic dispatch of domain notifications from events. |
+
+### Serverless functions (Quarkus Funqy + Knative, `functions/`)
+
+| Function | Trigger | Responsibility |
+|---|---|---|
+| `engagement-risk-scorer` | Event / HTTP | Scores early-warning signals (absence, inactivity, late submissions) with an auditable rationale. |
+| `credential-compliance-evaluator` | Event / HTTP | Compares missing requirements and completion percentage against credential targets; one finding per breach. |
+
+## Design principles
+
+1. **One bounded context per service**, identical hexagonal layout everywhere.
+2. **The domain invariant is code, not prose** — credits awarded to a learner never exceed the program's required total — an award that would overrun it is rejected (422) and records nothing; the remaining-credits balance never goes negative.
+3. **Privacy by design** — Learner identifiers are validated at enrolment and never stored or returned in clear — only a masked form is kept. Learning records are personal data: minimized, pseudonymized by UUID in events, and all data here is synthetic.
+4. **Database per service, API-first (OpenAPI), events as CloudEvents.**
+5. **Adapt by configuration** — rules, thresholds, tariffs/rates and providers are data
+   and configuration, not code forks (see *Adaptation guide*).
 
 ## Quick start
 
+Prerequisites: Java 21, Maven 3.9+, optionally Docker/Podman and Knative/OpenShift.
+
 ```bash
-make validate
-make test
+mvn verify                                    # build and test everything
+mvn -pl services/learner-service quarkus:dev
+docker compose up -d                          # local PostgreSQL, Kafka, Keycloak
 ```
 
-## Core interoperability envelope
+## Deployment
 
-Every request or event should carry `correlation_id`, `causation_id`, `schema_version`, `tenant_id`, purpose and data-classification metadata. Domain data must remain synthetic until an approved privacy and governance process exists.
+- **Kubernetes / OpenShift**: `kubectl apply -k deploy/kubernetes/`.
+- **Serverless**: Knative Services in `deploy/knative/` (scale to zero).
+- **Local**: `docker-compose.yml` for dependencies; services run with `quarkus:dev`.
 
-## Roadmap
+## Adaptation guide
 
-1. Implement the first domain service under `services/`.
-2. Add executable contract tests.
-3. Add a reproducible local event broker profile.
-4. Add OpenShift deployment overlays.
-5. Validate latency, throughput, error rate, trace coverage and recovery.
+| You want to… | Change only… |
+|---|---|
+| Adjust domain rules and thresholds | Rule data in the `assessment-rules-service` context and function configuration |
+| Change the guarded capacity semantics | The `progress-service` context (invariant stays: never negative) |
+| Plug your IdP / providers | OIDC at the gateway; provider adapters at the boundary |
+| Replace in-memory persistence | The repository port's JPA adapter on the service's own database (`DB_KIND`, `DB_URL`) |
+
+## Documentation map
+
+- Architecture (42010): `docs/architecture/` · Decisions: `docs/adr/`
+- Domain standards: `docs/domain/domain-standards.md`
+- Quality (25010), Security (27001/27002), Life cycle (15288/12207), API, Data, Operations: under `docs/`
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0 — see `LICENSE`.

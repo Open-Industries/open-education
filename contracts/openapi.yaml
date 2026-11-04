@@ -1,41 +1,66 @@
 openapi: 3.1.0
 info:
-  title: Open Education Reference API
-  version: 0.1.0
-  description: Provider-neutral research contract for portable learning records and education services.
+  title: Open Education — Reference Learning Core Platform — aggregate contract
+  version: 1.0.0
+  description: >
+    Aggregate view of the platform's public REST contracts. The normative per-service
+    contracts are generated from code by Quarkus SmallRye OpenAPI at `/openapi` on each
+    service; CI diffs them against this file (see docs/api/api-standards.md).
+    Conventions: RFC 9457 errors, Idempotency-Key on creates, lifecycle transitions
+    take no body, explicit units on every quantity, all data synthetic.
 servers:
-  - url: https://api.example.org/open-education/v1
+  - url: https://api.example.org/api/v1
+    description: Production (per adopter)
+security:
+  - bearerAuth: []
 paths:
-  /learning-records/{id}:
-    get:
-      operationId: getLearningRecord
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: X-Correlation-ID
-          in: header
-          required: true
-          schema: { type: string, format: uuid }
+  /learners:
+    post:
+      operationId: create-learner
+      summary: "Learner registry; the institutional identifier is masked at enrolment."
       responses:
-        '200':
-          description: Domain resource
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DomainResource'
-        '404': { description: Not found }
+        '201': { description: Created }
+        '400': { $ref: '#/components/responses/Problem' }
+  /progress:
+    post:
+      operationId: create-progress
+      summary: "Remaining-credits accounts per learner and the credit awards against them."
+      responses:
+        '201': { description: Created }
+        '400': { $ref: '#/components/responses/Problem' }
+  /assessment-rules:
+    post:
+      operationId: create-assessment
+      summary: "Decision rules binding study levels to attempt limits and integrity envelopes."
+      responses:
+        '201': { description: Created }
+        '400': { $ref: '#/components/responses/Problem' }
+  /courses:
+    post:
+      operationId: create-course
+      summary: "Course catalogue with credit values and modalities."
+      responses:
+        '201': { description: Created }
+        '400': { $ref: '#/components/responses/Problem' }
+  /notifications:
+    post:
+      operationId: dispatch-notification
+      summary: Dispatch a notification
+      responses:
+        '202': { description: Accepted }
 components:
-  schemas:
-    DomainResource:
-      type: object
-      required: [id, schema_version, status, updated_at]
-      properties:
-        id: { type: string }
-        schema_version: { type: string, const: '1.0' }
-        status: { type: string }
-        updated_at: { type: string, format: date-time }
-        metadata:
-          type: object
-          additionalProperties: true
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required: [type, title, status]
+            properties:
+              type: { type: string }
+              title: { type: string }
+              status: { type: integer }
+              detail: { type: string }
